@@ -19,8 +19,8 @@ def weight_var(shape,name):
     return W
 
 def hinge_loss(x,y):
-    l = tf.reduce_sum(tf.maximum(tf.zeros_like(x), tf.ones_like(x)- tf.multiply(x,y)))
-    l = tf.reduce_sum(tf.square(tf.ones_like(x)- tf.multiply(x,y)));
+    l = tf.reduce_sum(tf.maximum(tf.zeros_like(y), tf.subtract(tf.ones_like(y), tf.multiply(2*x-1,2*y-1))))
+    #l = tf.reduce_sum(tf.square(tf.ones_like(x)- tf.multiply(x,y)));
     return l
 def cross_loss(x,y):
     l = -tf.reduce_sum(tf.multiply(x, tf.log(y)))
@@ -47,22 +47,23 @@ def FCN(x0):
     l3 = fcnl(W3, b3, l2);
     l4 = fcnl(W4, b4, l3);
     l5 = fcnl(W5, b5, l4);
-    lf = (tf.matmul(Wf,l5)+bf)
+    lf = tf.nn.sigmoid(tf.matmul(Wf,l5)+bf)
     #model_output = tf.nn.sigmoid(lf);
     return lf,b5
 
 def SVM(x):
+    b = tf.tile(weight_var([1,16],'SVMw'))
     # Gaussian (RBF) kernel
     gamma = tf.constant(-10.0)
-    dist = tf.reduce_sum(tf.square(x_data), 1)
+    dist = tf.reduce_sum(tf.square(x), 1)
     dist = tf.reshape(dist, [-1, 1])
-    sq_dists = tf.add(tf.subtract(dist, tf.multiply(2., tf.matmul(x_data, tf.transpose(x_data)))), tf.transpose(dist))
+    sq_dists = tf.add(tf.subtract(dist, tf.multiply(2., tf.matmul(x, tf.transpose(x)))), tf.transpose(dist))
     my_kernel = tf.exp(tf.multiply(gamma, tf.abs(sq_dists)))
 
     # Compute SVM Model
     model_output = tf.matmul(b, my_kernel)
 
-    return loss, model_output
+    return model_output,gamma
 
 
 
@@ -73,18 +74,31 @@ labels = tf.placeholder(shape=[None, 1], dtype=tf.float32)
 #with tf.name_scope('Net'):
 #    # net
 
+#out,b1 = SVM(features);
 out,b1 = FCN(features);
-
 with tf.name_scope('loss'):
     # loss
     #loss = (tf.compat.v1.losses.hinge_loss(out[:,:,0], labels))
-    rightclass = tf.abs(tf.math.round(out[:,:,0]) - labels);
-    loss = tf.reduce_sum(tf.abs((out[:,:,0]) - labels));
-    #loss= hinge_loss(out[:,0,0],labels[:,0])
+
+    rightclass = tf.abs(tf.clip_by_value(tf.math.round(out[:,:,0]) ,0,1)- labels);
+    b1 = rightclass;
+    print(out)
+    loss = tf.reduce_sum(tf.abs(tf.subtract(out[:,0,0] , labels[:,0])));
+    #loss= hinge_loss(out[:,0,0],(labels[:,0]))
+        
+    ######
+    '''''
+    rightclass = tf.abs(tf.math.round(out[:,:]) - labels);
+    b1 = rightclass;
+    loss = tf.reduce_sum(tf.abs((out[:,0]) - labels));
+    loss= hinge_loss(out[:,0],labels[:,0])
+    '''''
     #loss = cross_loss(out[:,0,0],labels[:,0])
     #bce =tf.keras.losses.BinaryCrossentropy(from_logits=True)
     #loss = bce( labels,out[:,:,0])
-    regularizer = 0;
+    #regularizer = tf.nn.l2_loss(weights);
+    vars = tf.trainable_variables()
+    regularizer = tf.add_n([tf.nn.l2_loss(v) for v in vars]) * 0.0001
 #optimizer
 with tf.name_scope('training'):
     learningRate = tf.constant(1e-3)
@@ -92,11 +106,11 @@ with tf.name_scope('training'):
 
 # load dataset
 sess.run( tf.global_variables_initializer())
-loadname = '/cs/research/medim/gdisciac/SOLUS/example/VICTRE_PARADIGM/CLASSIFICATION_538_truth'
+loadname = '/cs/research/medim/gdisciac/SOLUS/example/VICTRE_PARADIGM/CLASSIFICATIONCONC_538'
 dataset = fullDataset(loadname);
 saver = tf.train.Saver();
 # training
-lVal = 0.000001;
+lVal = 1e-5;
 error_val_old = 1;
 for i in range(0,200000):
 
@@ -104,12 +118,13 @@ for i in range(0,200000):
     #      test1 = batch[0]
     #      test2 = batch[1]
     feed_train = {features: batch[0], labels: batch[1], learningRate: lVal}
-    sess.run(train_step, feed_dict=feed_train)
+    #sess.run(train_step, feed_dict=feed_train)
     _, train_result, good = sess.run([train_step, loss, rightclass], feed_dict=feed_train)
 
     #        if i % 500 == 0:
     #            lVal = lVal*1.5
-
+    if i % 50000 ==0:
+        lVal = lVal/2;
     if i % 20 == 0:
         # train_accuracy = accuracy.eval(feed_dict={imag: dataDbar.test.images[0:16], true: dataDbar.test.true[0:16]})
         # testPosit = testPos.eval(feed_dict={imag: dataDbar.test.images[0:16], true: dataDbar.test.true[0:16]})
@@ -117,9 +132,9 @@ for i in range(0,200000):
         feed_test = {features: dataset.test.features, labels: dataset.test.labels, learningRate: lVal}
 
         test_result,b = sess.run([loss,b1],  feed_dict=feed_test)
-        print(b)
+        #print(b)
 
-        print('iter={},  losstrain={}, losstest={}'.format(i, train_result, test_result))
+        print('iter={},  losstrain={}, losstest={}, class={}'.format(i, train_result, test_result,np.sum(b)))
 
         # run for all samples
 
