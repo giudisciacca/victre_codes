@@ -5,21 +5,63 @@ import matplotlib.pyplot as plt
 import h5py
 from dataClass import *
 
-
+NORMALISE =True;
+LOGNORM=True;
 batch_size = 200;
-bSize = 200;
+bSize = 121;
 nfeat = 16;
 loadname ='';
 
 
-def fcnl(w,b,x):
-    return tf.nn.relu(tf.matmul(w,x))+b
+
+def quantify(pred,lab):
+
+    lab = 1-lab;
+    pred = 1-pred;
+
+    TP = np.sum(np.multiply(lab,pred));
+    FP = np.sum(np.multiply(1-lab,pred));
+    FN = np.sum(np.multiply(lab,1-pred));
+    TN = np.sum(np.multiply(1-lab,1-pred));
+    prec = TP/(TP+FP)
+    rec = TP/(TP+FN)
+    f1 = (2*(prec*rec))/(prec+rec)
+    acc = 1- (np.sum(np.abs(lab-pred))/np.shape(lab)[0])
+    print('acc = {}'.format(acc))
+    print('prec = {}'.format(prec))
+    print('rec = {}'.format(rec))
+    print('f1 = {}'.format(f1))
+    return acc,prec,rec,f1
+
+
+def fcnl(w,b,x, outnum = 4):
+    out =tf.contrib.layers.fully_connected(
+        x,
+        outnum,
+        activation_fn=tf.nn.relu,
+        normalizer_fn=None,
+        normalizer_params=None,
+        weights_initializer=tf.contrib.layers.xavier_initializer(uniform = False),
+        weights_regularizer=None,
+        biases_initializer=tf.zeros_initializer(),
+        biases_regularizer=None,
+        reuse=None,
+        variables_collections=None,
+        outputs_collections=None,
+        trainable=True,
+        scope=None
+    )
+
+    out = tf.nn.relu(tf.matmul(w,x))+b
+    return out
+
 def weight_var(shape,name):
-    W = tf.get_variable(name,shape=shape,initializer=tf.contrib.layers.xavier_initializer(uniform = False))
+    W =tf.get_variable(name,shape=shape,initializer=tf.contrib.layers.xavier_initializer(uniform = True))
     return W
 
 def hinge_loss(x,y):
-    l = tf.reduce_sum(tf.maximum(tf.zeros_like(y), tf.subtract(tf.ones_like(y), tf.multiply(2*x-1,2*y-1))))
+    l = tf.reduce_sum(tf.maximum(tf.zeros_like(y), (tf.subtract(tf.ones_like(y), tf.multiply(2*x-1,2*y-1)))))
+    #l = tf.reduce_sum(tf.maximum(tf.zeros_like(y), tf.square(tf.subtract(tf.ones_like(y), tf.multiply(2 * x - 1, 2 * y - 1)))))
     #l = tf.reduce_sum(tf.square(tf.ones_like(x)- tf.multiply(x,y)));
     return l
 def cross_loss(x,y):
@@ -29,27 +71,43 @@ def cross_loss(x,y):
 
 def FCN(x0):
     x = tf.expand_dims(x0,axis=2)
-    base = 2;
-    W1 = weight_var([ nfeat*base,nfeat],'W1')
+    #x = tf.transpose(x0, perm=[1,0])
+    #x = tf.expand_dims(x0, axis=0)
+    base = 3
+    W1 = weight_var([ nfeat*base*1,nfeat],'W1')
     b1 = weight_var([1],'b1')
-    W2 = weight_var([ nfeat*base*2, nfeat*base],'W2')
+    W2 = weight_var([ nfeat*base, nfeat*base*1],'W2')
     b2 = weight_var([1],'b2')
-    W3 = weight_var([ nfeat*base*4,nfeat*base*2],'W3')
+    '''''
+    W3 = weight_var([ nfeat*base,nfeat*base],'W3')
     b3 = weight_var([1],'b3')
-    W4 = weight_var([ nfeat*base*2,nfeat*base*4],'W4')
+    W4 = weight_var([ nfeat*base*4,nfeat*base*4],'W4')
     b4 = weight_var([1],'b4')
-    W5 = weight_var([ nfeat*base, nfeat*base*2],'W5')
+    W5 = weight_var([ nfeat*base*3, nfeat*base*4],'W5')
     b5 = weight_var([1],'b5')
+    W6 = weight_var([ nfeat*base*2, nfeat*base*3],'W6')
+    b6 = weight_var([1],'b6')
+    W7 = weight_var([ nfeat*base, nfeat*base*2],'W7')
+    b7= weight_var([1],'b7')
+    '''
     Wf = weight_var([ 1,nfeat*base],'Wf')
     bf = weight_var([1],'bf')
-    l1 = fcnl(W1,b1,x);
-    l2 = fcnl(W2,b2,l1);
-    l3 = fcnl(W3, b3, l2);
-    l4 = fcnl(W4, b4, l3);
+
+    l1 = fcnl(W1,b1,x,outnum=16*2);
+    print(l1)
+    l2 = fcnl(W2,b2,l1,outnum=16);
+    '''''
+    l3 = fcnl(W3, b3, l2,outnum=8);
+    l4 = fcnl(W4, b4, l3,outnum=1);
     l5 = fcnl(W5, b5, l4);
-    lf = tf.nn.sigmoid(tf.matmul(Wf,l5)+bf)
-    #model_output = tf.nn.sigmoid(lf);
-    return lf,b5
+    l6 = fcnl(W6, b6, l5);
+    l7 = fcnl(W7, b7, l6);
+    
+    print(l7)
+    '''
+    lf = tf.nn.relu(tf.matmul(Wf,l2)+bf)
+    model_output = tf.nn.sigmoid(lf);
+    return lf,b1
 
 def SVM(x):
     b = tf.tile(weight_var([1,16],'SVMw'))
@@ -75,6 +133,7 @@ labels = tf.placeholder(shape=[None, 1], dtype=tf.float32)
 #    # net
 
 #out,b1 = SVM(features);
+
 out,b1 = FCN(features);
 with tf.name_scope('loss'):
     # loss
@@ -83,9 +142,10 @@ with tf.name_scope('loss'):
     rightclass = tf.abs(tf.clip_by_value(tf.math.round(out[:,:,0]) ,0,1)- labels);
     b1 = rightclass;
     print(out)
-    loss = tf.reduce_sum(tf.abs(tf.subtract(out[:,0,0] , labels[:,0])));
-    #loss= hinge_loss(out[:,0,0],(labels[:,0]))
-        
+    #loss = tf.reduce_sum(tf.abs(tf.subtract(out[:,0,0] , labels[:,0])));
+    loss= hinge_loss(out[:,0,0],(labels[:,0]))
+    out_res = tf.clip_by_value(tf.math.round(out[:, :, 0]), 0, 1)
+    lab_res = labels[:,0]
     ######
     '''''
     rightclass = tf.abs(tf.math.round(out[:,:]) - labels);
@@ -98,7 +158,7 @@ with tf.name_scope('loss'):
     #loss = bce( labels,out[:,:,0])
     #regularizer = tf.nn.l2_loss(weights);
     vars = tf.trainable_variables()
-    regularizer = tf.add_n([tf.nn.l2_loss(v) for v in vars]) * 0.0001
+    regularizer = tf.add_n([tf.nn.l2_loss(v) for v in vars]) *0* 0.01
 #optimizer
 with tf.name_scope('training'):
     learningRate = tf.constant(1e-3)
@@ -106,26 +166,55 @@ with tf.name_scope('training'):
 
 # load dataset
 sess.run( tf.global_variables_initializer())
-loadname = '/cs/research/medim/gdisciac/SOLUS/example/VICTRE_PARADIGM/CLASSIFICATIONCONC_538'
-dataset = fullDataset(loadname);
+loadname = '/cs/research/medim/gdisciac/SOLUS/example/VICTRE_PARADIGM/JacFD_DTsepWave_coeffs3_706'
+dataset = fullDataset(loadname)
 saver = tf.train.Saver();
+
+
+
+if LOGNORM==True:
+    #dataset.train._features = np.log(1-np.min(dataset.train.features)+dataset.train.features)
+    #dataset.valid._features =np.log(1-np.min(dataset.valid.features)+dataset.valid.features)
+    #dataset.test._features=np.log(1-np.min(dataset.test.features)+dataset.test.features)
+    dataset.train._features = np.log(dataset.train.features)
+    dataset.valid._features =np.log(dataset.valid.features)
+    dataset.test._features=np.log(dataset.test.features)
+    #dataset.train._features = np.divide(dataset.train.features - np.mean(dataset.train.features,axis=0),np.std(dataset.train.features,axis=0))
+    #dataset.test._features = np.divide(dataset.test.features - np.mean(dataset.test.features,axis=0),np.std(dataset.test.features,axis=0))
+    #dataset.valid._features = np.divide(dataset.valid.features - np.mean(dataset.valid.features,axis=0),np.std(dataset.valid.features,axis=0))
+if NORMALISE==True:
+    concd = np.concatenate((dataset.train.features,dataset.valid.features ,dataset.test.features), axis =0 )
+    nmean = np.mean(concd, axis=0)
+    nstd= np.std( concd, axis=0)
+    dataset.train._features = np.divide(dataset.train.features - nmean,nstd)
+    dataset.test._features = np.divide(dataset.test.features - nmean,nstd)
+    dataset.valid._features = np.divide(dataset.valid.features - nmean,nstd)
 # training
-lVal = 1e-5;
-error_val_old = 1;
-for i in range(0,200000):
+dict_param ={"typ":['JacFD_sepWave_coeffs_724','JacFD_sepWave_coeffs_724_truth'],
+             "lVal":[500e-6,],
+             "decay":[5000,],
+             "regu":[0,],
+             "LOG":[True,False]}
+lVal = 20e-6#20e-6;
+decay=40000#25000;
+error_val_old = 1000;
+champ_mis_old  = 2;
+champ_mis = 2;
+for i in range(0,30000):
 
     batch = dataset.train.next_batch(bSize)
     #      test1 = batch[0]
     #      test2 = batch[1]
     feed_train = {features: batch[0], labels: batch[1], learningRate: lVal}
+    feed_train = {features: dataset.train.features, labels: dataset.train.labels, learningRate: lVal}
     #sess.run(train_step, feed_dict=feed_train)
     _, train_result, good = sess.run([train_step, loss, rightclass], feed_dict=feed_train)
 
     #        if i % 500 == 0:
     #            lVal = lVal*1.5
-    if i % 50000 ==0:
+    if i % decay ==0:
         lVal = lVal/2;
-    if i % 20 == 0:
+    if i % 10 == 0:
         # train_accuracy = accuracy.eval(feed_dict={imag: dataDbar.test.images[0:16], true: dataDbar.test.true[0:16]})
         # testPosit = testPos.eval(feed_dict={imag: dataDbar.test.images[0:16], true: dataDbar.test.true[0:16]})
 
@@ -133,12 +222,13 @@ for i in range(0,200000):
 
         test_result,b = sess.run([loss,b1],  feed_dict=feed_test)
         #print(b)
-
-        print('iter={},  losstrain={}, losstest={}, class={}'.format(i, train_result, test_result,np.sum(b)))
+        if i %60:
+            print('iter={},  losstrain={}, losstest={}, class={}, classperc={} champ = {}, champclass={}'.format(i, train_result, test_result,np.sum(b),
+                                                                                   np.sum(b)/np.shape(dataset.test.features)[0],error_val_old, champ_mis))
 
         # run for all samples
 
-        if i > 400:
+        if i > 20:
             # check mean validation error
             sumok = 0;
             array_val = [None] * (np.shape(dataset.valid.features)[0]-bSize+1)
@@ -146,11 +236,18 @@ for i in range(0,200000):
             feed_val = {features: dataset.valid.features,
                          labels: dataset.valid.labels}
             loss_val, classok = sess.run([loss,rightclass], feed_dict=feed_val)
-
+            print(loss_val)
             if loss_val < error_val_old:
                 error_val_old = loss_val
-                print('NEW CHAMPION SAVING')#+%f GOOD = %d' % (loss_val, classok))
 
+
+            champ_mis_val = np.sum(classok) / np.shape(dataset.valid.features)[0];
+            if champ_mis_val < champ_mis_old:
+                champ_mis_old = champ_mis_val
+                champ_mis = np.sum(b) / np.shape(dataset.test.features)[0];
+                print('NEW CHAMPION SAVING')#+%f GOOD = %d' % (loss_val, classok))
+                pred,lab = sess.run([out_res, lab_res], feed_dict=feed_test)
+quantify(pred[:,0], lab)
                 #saved_path = saver.save(sess, OutName[0][0:-4] + 'best_binaryInput')
 
 ## gen set for space
@@ -159,7 +256,7 @@ for i in range(0,200000):
 #f = np.meshgrid(*cated)
 #feat_domain = np.c_()
 #feat_domain=
-feed_domain = {features: feat_domain, labels: lab_domain}
+#feed_domain = {features: feat_domain, labels: lab_domain}
 
 
 

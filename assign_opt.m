@@ -1,4 +1,4 @@
-function [MUA, MUA0, structMUA, MUSP, MUSP0, structMUSP] = assign_opt(structure,structureref,valConA)
+function [MUA, MUA0, structMUA, MUSP, MUSP0, structMUSP] = assign_opt(structure,structureref,valConA,benign)
     if nargin < 3
         valConA = 2;
     end
@@ -25,7 +25,6 @@ function [MUA, MUA0, structMUA, MUSP, MUSP0, structMUSP] = assign_opt(structure,
             vein  = 225;
             
             lesion = 333;
-
             
             crom_fat = max([0,0,0,0,0],[1.5,1.5,1.2,0.2,0.025]+[0.15,0.15,0.05,0.05,0.05].*randn(1,5));%[oxy mu M, deoxy 0.01 muM, fat, water, collagen]
             crom_skin = max([0,0,0,0,0],[3,2,0.4,0.2,0.4]+[0.15,0.15,0.05,0.05,0.05].*randn(1,5));
@@ -37,7 +36,21 @@ function [MUA, MUA0, structMUA, MUSP, MUSP0, structMUSP] = assign_opt(structure,
             crom_duct = max([0,0,0,0,0],[0,0,0.3,0.3,0.4]+[0.15,0.15,0.05,0.05,0.05].*randn(1,5));
             crom_artery = max([0,0,0,0,0],[7.5*1,0.5*1,0.0,0.0,0.0]+[0.15,0.15,0.05,0.05,0.05].*randn(1,5)); % %7.51 to 9.37 mmol/L
             crom_vein  = max([0,0,0,0,0],[0.5*1,8*1,0.0,0.0,0.0]+[0.15,0.15,0.05,0.05,0.05].*randn(1,5));
+
+            Li = 1;
+            if Li
             
+            crom_fat = max([0,0,0,0,0],[13.8,4.8,1.2,0.2,0.025]+[0.15,0.15,0.05,0.05,0.05].*randn(1,5));%[oxy mu M, deoxy 0.01 muM, fat, water, collagen]
+            crom_skin = max([0,0,0,0,0],[19,6.5,0.4,0.2,0.4]+[0.15,0.15,0.05,0.05,0.05].*randn(1,5));
+            crom_glandular = max([0,0,0,0,0],[2.5,2.5,0.5,0.45,0.2]+[0.15,0.15,0.05,0.05,0.05].*randn(1,5));
+            crom_nipple = max([0,0,0,0,0],[6,4,0.1,0.3,0.6]+[0.15,0.15,0.05,0.05,0.05].*randn(1,5));
+            crom_muscle = max([0,0,0,0,0],[4,6,0.4,0.2,0.4]+[0.15,0.15,0.05,0.05,0.05].*randn(1,5)); %collagen 10%
+            crom_ligament = max([0,0,0,0,0],[0,0,0.05,0.05,0.9]+[0.15,0.15,0.05,0.05,0.05].*randn(1,5));
+            crom_TDLU1 = max([0,0,0,0,0],[0,0,0.3,0.2,0.5]+[0.15,0.15,0.05,0.05,0.05].*randn(1,5));
+            crom_duct = max([0,0,0,0,0],[0,0,0.3,0.3,0.4]+[0.15,0.15,0.05,0.05,0.05].*randn(1,5));
+            crom_artery = max([0,0,0,0,0],[0.95*210,0.05*210,0.0,0.0,0.0]+[0.15,0.15,0.05,0.05,0.05].*randn(1,5)); % %7.51 to 9.37 mmol/L
+            crom_vein  = max([0,0,0,0,0],[0.75*210, 0.25*210,0.0,0.0,0.0]+[0.05,0.05,0.05,0.05,0.05].*randn(1,5));
+            end
            
             R = rand(3,1);
             R = R/sum(R(:));
@@ -99,14 +112,17 @@ function [MUA, MUA0, structMUA, MUSP, MUSP0, structMUSP] = assign_opt(structure,
             B = 0*structure;
             MUSP0 = zeros(size(structure,1),size(structure,2),size(structure,3), numel(lambda));
             for val = Allval(1:end-1)'
-                a = 0.5+1*rand(1);
-                b = 0.2+ 0.9* rand(1);
-                musp = a*(lambda/lambda0).^(-b) + (0.05*a*(lambda/lambda0).^(-b)).*randn(1,8);
+                a = 1.4+0.17*randn(1);
+                b = 0.3+ 0.05* randn(1);
+                musp = a*(lambda/lambda0).^(-b) + (0.001*a*(lambda/lambda0).^(-b)).*randn(1,8);
                 idx = (structureref==val);
                 A(idx) = a; 
                 B(idx) = b;
                 for il = 1:numel(lambda)
                     IDX = 0*MUSP0;
+                    if isempty(idx)
+                        idx = 0;
+                    end
                     IDX(:,:,:, il) = idx;
                     MUSP0(logical(IDX))= musp(il); 
                 end
@@ -118,15 +134,15 @@ function [MUA, MUA0, structMUA, MUSP, MUSP0, structMUSP] = assign_opt(structure,
             
             MUSP = MUSP0;
             val = Allval(end);
-            a = 0.5+1*rand(1);
-            b = 0.2+ 0.9* rand(1);
-            musp = a*(lambda/lambda0).^(-b) + (0.1*a)*randn(1,8);
+            a = 1.4+0.08*randn(1);
+            b = 0.3+ 0.05* randn(1);
+            musp = a*(lambda/lambda0).^(-b) + (0.025*a)*randn(1,8);
             idx = (structure==val);
             A(idx) = a; 
             B(idx) = b;
             
-            if numel(valConA)==2
-                tmpmus = valConS(1)*mean(A(logical(idx(:))))*(lambda/lambda0).^(-valConS(2)) + (0.1*a)*randn(1,8);
+            if numel(valConA)>=8
+                tmpmus = valConS(1)*(lambda/lambda0).^(-valConS(2)) + (0.001*a*(lambda/lambda0).^(-b)).*randn(1,8);
             else
                 tmpmus = musp;                                                    
             end

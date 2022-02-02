@@ -1,4 +1,4 @@
-function [structuredMass, voidMass] = insert_mass(structure , mass0)
+function [structuredMass, voidMass] = insert_mass(structure , mass0,inC)
 
     % init
     structuredMass = 0*structure;
@@ -19,7 +19,9 @@ function [structuredMass, voidMass] = insert_mass(structure , mass0)
         0.25*(size(structuredMass,1) - size(mass,1)), ...
         0.5*(size(structuredMass,3) - size(mass,3))  ]);
     c = floor(size(structure)/2 + (pmax).*mass_disp); 
-
+    if nargin == 3
+        c = inC;
+    end
     voidMass = insertInVoid(voidMass, mass, c);
     structure(voidMass == 1) = 333;
     structuredMass = structure;

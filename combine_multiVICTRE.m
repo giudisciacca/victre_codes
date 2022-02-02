@@ -1,6 +1,6 @@
 seednames = (intersect(cell2mat(extract_seednames('mass_','.cfg'))',...
             cell2mat(extract_seednames('pc_','_crop.mhd'))'));
- 
+SAVE = 0;
 k =1;
 for i = [1:492,494:numel(seednames)]%Nin:Nin+N_lesions 
     i
@@ -8,7 +8,7 @@ for i = [1:492,494:numel(seednames)]%Nin:Nin+N_lesions
     seedFile = num2str(seednames(i));
     if ~isempty(dir(['mass_',seedFile,'_*.raw']))
         Mass = read_mass_mhd(seedFile);
-        structure = read_structure_mhd(seedFile);
+        [structure,percV(k)] = read_structure_mhd(seedFile);
 
         [structureMass,voidMass] = insert_mass(structure, Mass);
          ifl = randi(2)-1;
@@ -37,10 +37,11 @@ for i = [1:492,494:numel(seednames)]%Nin:Nin+N_lesions
 
         [structopt.mua,structopt.mua0,~,structopt.musp,structopt.musp0,~] = assign_opt(structureMass, structure,randAbs );
         %figure(1)
-        plot(squeeze(mean(mean(mean(structopt.mua0,1),2),3)))
-        hold on
-         %plot(randAbs(1:8), '-*')
-        drawnow
+       
+%         plot(squeeze(mean(mean(mean(structopt.mua0,1),2),3)))
+%         hold on
+%          %plot(randAbs(1:8), '-*')
+%         drawnow
         contrastMua = structopt.mua - structopt.mua0;
         contrastMusp = structopt.musp - structopt.musp0;
         %assign_std(structureMass);
@@ -48,6 +49,7 @@ for i = [1:492,494:numel(seednames)]%Nin:Nin+N_lesions
 
         structkwave = assign_std(structure);
         dimVox = 0.5;
+        if SAVE
         save(['VICTRE_PARADIGM_',num2str(k),'.mat'],'-v7.3','label','structkwave','structure','structopt','structureMass','voidMass','dimVox','contrastMua','contrastMusp')
         %save(['VICTRE_',num2str(k),'.mat'],'-v7.3','structkwave','structure','structopt','structureMass','voidMass','dimVox','contrastMua','contrastMusp')
 
@@ -55,8 +57,10 @@ for i = [1:492,494:numel(seednames)]%Nin:Nin+N_lesions
         delta = 0.5;
         save(['Prior_VICTRE_PARADIGM',num2str(k),'.mat'],'-v7.3','delta','mask')
         %save(['Prior_VICTRE_',num2str(k),'.mat'],'-v7.3','delta','mask')
-        k = k+1;
+        
         disp('saved')
+        end
+        k = k+1;
     end
     
 end

@@ -1,32 +1,122 @@
 #import tensorflow as tf
 import numpy as np
+import sklearn
 from sklearn import svm as sksvm
+from sklearn.linear_model import LogisticRegression as logReg
+from sklearn.model_selection import GridSearchCV
 #import sklearn
 #import matplotlib.pyplot as plt
 import h5py
 from dataClass import *
+NORMALISE = True;
+LOGNORM=False;
 
 batch_size = 200;
 bSize = 200;
 nfeat = 16;
 
+def bilog(x):
+    return np.multiply(np.sign(x),np.log(np.abs(x)+1))
+def log(x):
+    return np.log(x)
 
+
+def quantify(pred,lab):
+
+    lab = 1-lab;
+    pred = 1-pred;
+
+    TP = np.sum(np.multiply(lab,pred));
+    FP = np.sum(np.multiply(1-lab,pred));
+    FN = np.sum(np.multiply(lab,1-pred));
+    TN = np.sum(np.multiply(1-lab,1-pred));
+    prec = TP/(TP+FP)
+    rec = TP/(TP+FN)
+    f1 = (2*(prec*rec))/(prec+rec)
+    acc = 1- (np.sum(np.abs(lab-pred))/np.shape(lab)[1])
+    print('acc = {}'.format(acc))
+    print('prec = {}'.format(prec))
+    print('rec = {}'.format(rec))
+    print('f1 = {}'.format(f1))
+    return acc,prec,rec,f1
+
+def combData(x, test=1):
+    if test == 1:
+
+        return np.concatenate((x.valid.features, x.test.features), axis=0),np.concatenate((x.valid.labels, x.test.labels), axis=0)
+
+    else:
+        #np.concatenate((x.train.features,x.valid.features,x.test.features),axis=0)
+        return np.concatenate((x.train.features,x.valid.features,x.test.features),axis=0),np.concatenate((x.train.labels,x.valid.labels,x.test.labels),axis=0)
 # load dataset
-loadname = '/cs/research/medim/gdisciac/SOLUS/example/VICTRE_PARADIGM/CLASSIFICATION_538'
+loadname = '/cs/research/medim/gdisciac/SOLUS/example/VICTRE_PARADIGM/JacFD_DTsepWave_coeffs3_706'
+#loadname = '/cs/research/medim/gdisciac/SOLUS/example/VICTRE_PARADIGM/CLASSIFICATION_538'
+
 dataset = fullDataset(loadname);
 
 
-X = dataset.train.features;
-Y = np.array(dataset.train.labels, dtype=np.int32)
-clf = sksvm.NuSVC(nu = 0.5,gamma='scale',kernel='rbf',probability=False,tol = 0.01)
+
+if LOGNORM==True:
+    posit = np.abs(np.min(combData(dataset,test=0)[0]))+1;#0.000000001;
+    dataset.train._features = np.log(dataset.train.features)
+    dataset.valid._features =np.log(dataset.valid.features)
+    dataset.test._features=np.log(dataset.test.features)
+    #dataset.train._features = bilog(posit+dataset.train.features)
+    #dataset.valid._features =bilog(posit+dataset.valid.features)
+    #dataset.test._features=bilog(posit+dataset.test.features)
+
+#print(dataset.train.features[0,:])
+if NORMALISE==True:
+    concd = np.concatenate((dataset.train.features,dataset.valid.features ,dataset.test.features), axis =0 )
+    nmean = np.mean(concd, axis=0)
+    nstd= np.std( concd, axis=0)
+    dataset.train._features = np.divide(dataset.train.features - nmean,nstd)
+    dataset.test._features = np.divide(dataset.test.features - nmean,nstd)
+    dataset.valid._features = np.divide(dataset.valid.features - nmean,nstd)
+#if PCA == True:
+#    sklearn.decomposition.PCA
+
+X = dataset.train.features;#combData(dataset)[0]
+Y = np.array(dataset.train.labels, dtype=np.int32)#combData(dataset)[1],dtype=np.int32)#
+
+parameters = {'kernel':['rbf','poly','sigmoid'], 'C':[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1,1.25,1.5,2.5,3,4,5,6,7,8,9,10,20,40,50,75,100],'max_iter':[6000]}
+#clf = sksvm.SVC(C = 1,gamma='auto', kernel='rbf',probability=False,tol = 0.0000001)#class_weight='balanced'
+clf = GridSearchCV(estimator=sksvm.SVC(), param_grid=parameters)
 clf.fit(X,np.ravel(Y))
 
+#lgr = logReg(random_state=0,max_iter=300, C=50).fit(X, Y)
+parameters = {'C':[0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,1,1.5,2.5,3,4,5,6,7,8,9,10,20,40,50,75,100],'max_iter':[6000]}
+lgr = GridSearchCV(estimator=logReg(), param_grid=parameters)
+lgr.fit(X,np.ravel(Y))
 trmis = np.sum(np.abs(clf.predict(X) -Y.T))
 tstmis = np.sum(np.abs(clf.predict(dataset.test.features)-dataset.test.labels.T))
 valmis = np.sum(np.abs(clf.predict(dataset.valid.features)-dataset.valid.labels.T))
+print('SVM')
 print(trmis/X.shape[0])
 print(tstmis/dataset.test.labels.shape[0])
 print(valmis/dataset.valid.labels.shape[0])
+print(1-(tstmis+valmis)/(dataset.valid.labels.shape[0]+dataset.test.labels.shape[0]))
+
+quantify(clf.predict(combData(dataset)[0]),combData(dataset)[1].T)
+quantify(lgr.predict(combData(dataset)[0]),combData(dataset)[1].T)
+
+trmis = np.sum(np.abs(lgr.predict(X) -Y.T))
+tstmis = np.sum(np.abs(lgr.predict(dataset.test.features)-dataset.test.labels.T))
+valmis = np.sum(np.abs(lgr.predict(dataset.valid.features)-dataset.valid.labels.T))
+
+print('Logistic regression')
+print(trmis/X.shape[0])
+print(tstmis/dataset.test.labels.shape[0])
+print(valmis/dataset.valid.labels.shape[0])
+
+print( 1- (tstmis+valmis)/(dataset.valid.labels.shape[0]+dataset.test.labels.shape[0]))
+
+print(dataset.valid.labels.shape[0]+dataset.test.labels.shape[0]+dataset.train.labels.shape[0])
+
+print('Q clf')
+quantify(clf.predict(combData(dataset)[0]),combData(dataset)[1].T)
+print('Q lgr')
+quantify(lgr.predict(combData(dataset)[0]),combData(dataset)[1].T)
 '''''
 
 first_term = tf.reduce_sum(b)

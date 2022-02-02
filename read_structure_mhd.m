@@ -1,7 +1,16 @@
-function structure = read_structure_mhd(seedFile)
+function [structure,airV] = read_structure_mhd(seedFile,flagcrop)
 
-    
-    loadname = ['./pc_',num2str(seedFile),'_crop'];
+    if nargin <2
+     flagcrop = 1;
+    end
+    switch flagcrop
+        case 1
+            loadname = ['./pc_',num2str(seedFile),'_crop'];
+        case 2
+            loadname = ['./p_',num2str(seedFile)];
+        case 3
+            loadname = ['./pc_',num2str(seedFile)];
+    end
     FLAG = 0;
     if ~exist([loadname,'.raw'],'file') && exist([loadname,'.raw.gz'], 'file')
         FLAG = 1;
@@ -14,6 +23,11 @@ function structure = read_structure_mhd(seedFile)
     a = read_mhd([loadname,'.mhd']);
     
     voxels = a.data;
+    if flagcrop ~= 1
+        structure = voxels; 
+        airV = 0;
+        return
+    end
     xmax = 54/0.5; %mm/voxel size 
     ymax = 44/0.5;
     zmax = 45/0.5;
@@ -27,6 +41,7 @@ function structure = read_structure_mhd(seedFile)
     end
     
     structure = voxels(y0:(y0+ymax-1),x0:(x0+xmax-1), z0:z0+zmax-1) ;
+    airV = (sum(structure(:) == 50)+sum(structure(:) == 0))/numel(structure);
 
 %     sum(structure(:) == 0)
 %     sum(structure(:) == 50)
@@ -36,7 +51,6 @@ function structure = read_structure_mhd(seedFile)
     h = h(idx);
     r = randi(2)-1;
     structure(structure==0) = r*h(1) +( 1-r)*h(2); %most present tissue
-    
     structure(structure == 50) = 40; % chest is muscle
     structure = permute(structure, [2,1,3]);
     if FLAG == 1 
